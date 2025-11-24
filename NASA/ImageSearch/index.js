@@ -40,8 +40,7 @@ async function performSearch(query, page = 1){
     const requestId = lastRequestId;
 
     setLoading(true);
-    statusEl.textContent = 'Searching';
-    // statusEl.textContent = 'Searching';
+    statusEl.textContent = 'Searching...';
     thumbsEl.innerHTML = '';
 
     // Build the search URL. We hardcode media_type=image per requirements.
@@ -136,7 +135,7 @@ async function onThumbnailClicked(item){
     const nasa_id = meta.nasa_id;
 
     // Show interim loading UI in the detail pane
-    detailEl.innerHTML = '<div class="loading">Loading image</div>';
+    detailEl.innerHTML = '<div class="loading">Loading image...</div>';
 
     try{
     const assetUrl = `https://images-api.nasa.gov/asset/${encodeURIComponent(nasa_id)}`;

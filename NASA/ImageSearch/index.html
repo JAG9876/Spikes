@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NASA Image Search</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="left" aria-label="Search and results">
+      <div class="controls">
+        <input id="q" type="search" placeholder="Search NASA images (e.g., moon, saturn, nebula)" />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <div id="status" class="loading" style="display:none">Loading</div>
+      <div id="resultsArea" class="results">
+        <div id="thumbs" class="thumb-grid"></div>
+      </div>
+
+      <div class="pagination">
+        <button id="prevBtn">Previous</button>
+        <div class="meta">Page <span id="pageNumber">1</span></div>
+        <button id="nextBtn">Next</button>
+      </div>
+    </aside>
+
+    <main class="right" aria-label="Selected image">
+      <div id="detail" class="placeholder">Select an image from the left</div>
+    </main>
+</div>
+  <script src="index.js"></script>
+</body>
+</html>

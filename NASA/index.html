@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NASA Image Search</title>
+  <style>
+    :root{
+      --gap:12px;
+      --left-width:420px;
+      --accent:#0b5fff;
+      --muted:#666;
+      --bg:#f7f9fc;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:var(--bg);color:#111}
+    .app{display:flex;gap:var(--gap);height:100vh;padding:var(--gap);box-sizing:border-box}
+    /* Two-column layout */
+    .left{width:var(--left-width);min-width:260px;display:flex;flex-direction:column;background:#fff;border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(12,20,40,.06)}
+    .right{flex:1;display:flex;flex-direction:column;background:#fff;border-radius:8px;padding:18px;box-shadow:0 2px 8px rgba(12,20,40,.06);min-width:0}
+
+    /* Search controls */
+    .controls{display:flex;gap:8px;align-items:center}
+    .controls input[type="search"]{flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px}
+    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    button:disabled{opacity:.5;cursor:default}
+
+    /* Results area */
+    .results{margin-top:12px;overflow:auto;padding-bottom:12px}
+    .thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+    .thumb{background:#fafafa;border-radius:6px;padding:6px;display:flex;flex-direction:column;align-items:center;cursor:pointer;border:1px solid transparent}
+    .thumb:hover{border-color:#e2e8f0}
+    .thumb img{width:100%;height:88px;object-fit:cover;border-radius:4px}
+    .thumb .t{font-size:12px;color:var(--muted);margin-top:6px;text-align:center;line-height:1.1}
+
+    /* Pagination */
+    .pagination{display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 0}
+    .meta{font-size:13px;color:var(--muted)}
+
+    /* Right pane */
+    .placeholder{display:flex;align-items:center;justify-content:center;color:var(--muted);height:100%;text-align:center}
+    .detail{display:flex;flex-direction:column;gap:12px;height:100%}
+    .detail img{max-height:70vh;object-fit:contain;border-radius:6px;background:#000}
+    .detail .info h2{margin:0;font-size:18px}
+    .detail .info p{margin:0;color:var(--muted)}
+
+    /* Loading / error */
+    .loading{padding:12px;text-align:center;color:var(--muted)}
+    .error{padding:12px;text-align:center;color:#b00020}
+
+    /* Responsive: stack on small screens */
+    @media (max-width:900px){
+      .app{flex-direction:column}
+      .left{width:100%}
+      .right{width:100%}
+      .detail img{max-height:50vh}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="left" aria-label="Search and results">
+      <div class="controls">
+        <input id="q" type="search" placeholder="Search NASA images (e.g., moon, saturn, nebula)" />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <div id="status" class="loading" style="display:none">Loading</div>
+      <div id="resultsArea" class="results">
+        <div id="thumbs" class="thumb-grid"></div>
+      </div>
+
+      <div class="pagination">
+        <button id="prevBtn">Previous</button>
+        <div class="meta">Page <span id="pageNumber">1</span></div>
+        <button id="nextBtn">Next</button>
+      </div>
+    </aside>
+
+    <main class="right" aria-label="Selected image">
+      <div id="detail" class="placeholder">Select an image from the left</div>
+    </main>
+  </div>
+
+  <script>
+    /*
+      Insert your NASA API key below if you want to include it in requests.
+      The NASA Image and Video Library endpoints generally work without an API key, but
+      you can add `&api_key=YOUR_NASA_API_KEY_HERE` to the URL if you have one.
+    */
+    const NASA_API_KEY = 'YOUR_NASA_API_KEY_HERE'; // <- Replace with your key if desired
+
+    // DOM elements
+    const qInput = document.getElementById('q');
+    const searchBtn = document.getElementById('searchBtn');
+    const thumbsEl = document.getElementById('thumbs');
+    const detailEl = document.getElementById('detail');
+    const statusEl = document.getElementById('status');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageNumberEl = document.getElementById('pageNumber');
+
+    // Application state
+    let currentQuery = '';
+    let currentPage = 1;
+    let isLoading = false;
+    let lastRequestId = 0; // used to ignore stale responses
+
+    // Utility: set loading state (disables actions to prevent duplicate requests)
+    function setLoading(loading){
+      isLoading = loading;
+      statusEl.style.display = loading ? 'block' : 'none';
+      searchBtn.disabled = loading;
+      prevBtn.disabled = loading || currentPage <= 1;
+      nextBtn.disabled = loading;
+    }
+
+    // Perform a search using the NASA Image and Video Library API
+    // Pagination is implemented with the `page` parameter (page=1,2,...)
+    async function performSearch(query, page = 1){
+      if (!query) return;
+      currentQuery = query;
+      currentPage = page;
+      lastRequestId += 1;
+      const requestId = lastRequestId;
+
+      setLoading(true);
+      statusEl.textContent = 'Searching';
+      thumbsEl.innerHTML = '';
+
+      // Build the search URL. We hardcode media_type=image per requirements.
+      const base = 'https://images-api.nasa.gov/search';
+      const params = new URLSearchParams({q: query, media_type: 'image', page: String(page)});
+      // Optionally include API key if provided
+      if (NASA_API_KEY && NASA_API_KEY !== 'YOUR_NASA_API_KEY_HERE') params.append('api_key', NASA_API_KEY);
+
+      try{
+        const resp = await fetch(base + '?' + params.toString());
+        if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+        const data = await resp.json();
+
+        // If another newer request was started meanwhile, ignore this response
+        if (requestId !== lastRequestId) return;
+
+        renderThumbnails(data);
+      }catch(err){
+        thumbsEl.innerHTML = '';
+        statusEl.style.display = 'block';
+        statusEl.className = 'error';
+        statusEl.textContent = 'Error loading results: ' + err.message;
+      }finally{
+        // restore status style
+        statusEl.className = 'loading';
+        setLoading(false);
+        updatePaginationControls();
+      }
+    }
+
+    // Map thumbnails from API response to DOM
+    // The API response has `collection.items[]`; each item may include a `links[]`
+    // where images (thumbnails/previews) are provided. We pick a reasonable small image from there.
+    function renderThumbnails(apiData){
+      const items = apiData && apiData.collection && apiData.collection.items ? apiData.collection.items : [];
+      thumbsEl.innerHTML = '';
+
+      if (!items.length){
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'No results found';
+        return;
+      }
+
+      statusEl.style.display = 'none';
+
+      // For each item, build a thumbnail card
+      items.forEach(item => {
+        // Find a link that is an image (thumbnail). `links` may be missing; fallback to data href.
+        const thumbUrl = getThumbnailFromItem(item);
+        const title = (item.data && item.data[0] && item.data[0].title) || 'Untitled';
+        const nasa_id = item.data && item.data[0] && item.data[0].nasa_id;
+
+        const div = document.createElement('div');
+        div.className = 'thumb';
+        div.tabIndex = 0;
+
+        const img = document.createElement('img');
+        img.src = thumbUrl || '';
+        img.alt = title;
+
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = title;
+
+        div.appendChild(img);
+        div.appendChild(t);
+
+        // Clicking a thumbnail updates the right pane without reloading
+        div.addEventListener('click', () => onThumbnailClicked(item));
+        div.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') onThumbnailClicked(item); });
+
+        thumbsEl.appendChild(div);
+      });
+    }
+
+    // Helper: find a thumbnail URL from an item
+    function getThumbnailFromItem(item){
+      if (!item) return null;
+      // `links` commonly contains images with rel=preview; pick first image link
+      if (Array.isArray(item.links)){
+        const link = item.links.find(l => l.render === 'image' || (l.rel && l.rel.includes('preview')) ) || item.links[0];
+        if (link && link.href) return link.href;
+      }
+      // fallback: sometimes a thumbnail is available in data[0].href (rare)
+      return null;
+    }
+
+    // Called when a thumbnail is clicked. Fetch asset list to pick a good-resolution image.
+    async function onThumbnailClicked(item){
+      if (!item || !item.data || !item.data[0]) return;
+      const meta = item.data[0];
+      const nasa_id = meta.nasa_id;
+
+      // Show interim loading UI in the detail pane
+      detailEl.innerHTML = '<div class="loading">Loading image</div>';
+
+      try{
+        const assetUrl = `https://images-api.nasa.gov/asset/${encodeURIComponent(nasa_id)}`;
+        // optionally include API key
+        const url = NASA_API_KEY && NASA_API_KEY !== 'YOUR_NASA_API_KEY_HERE' ? assetUrl + '?api_key=' + NASA_API_KEY : assetUrl;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Asset error: ${resp.status}`);
+        const assetData = await resp.json();
+
+        const best = pickBestImageFromAsset(assetData);
+        renderFullImage({title: meta.title, description: meta.description || meta.description_508 || meta.photographer || '', imageUrl: best, meta});
+      }catch(err){
+        detailEl.innerHTML = '<div class="error">Error loading image: ' + err.message + '</div>';
+      }
+    }
+
+    // Choose a reasonable image URL from the asset endpoint response
+    function pickBestImageFromAsset(assetData){
+      // assetData.collection.items is usually an array with many variants; prefer high-resolution jpg
+      const items = assetData && assetData.collection && assetData.collection.items ? assetData.collection.items : [];
+      // Filter images
+      const images = items.map(i => i.href).filter(h => typeof h === 'string' && /\.(jpe?g|png)$/i.test(h));
+      if (!images.length) return items[0] && items[0].href;
+      // Try to pick the largest (often last entries are higher rez) — pick the last jpg/png
+      return images[images.length - 1];
+    }
+
+    // Render the full image and metadata in the right pane
+    function renderFullImage({title, description, imageUrl, meta}){
+      const wrapper = document.createElement('div');
+      wrapper.className = 'detail';
+
+      const img = document.createElement('img');
+      img.src = imageUrl || '';
+      img.alt = title || 'NASA Image';
+
+      const info = document.createElement('div');
+      info.className = 'info';
+      const h2 = document.createElement('h2');
+      h2.textContent = title || '';
+      const p = document.createElement('p');
+      p.textContent = description || (meta && meta.title) || '';
+
+      info.appendChild(h2);
+      info.appendChild(p);
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(info);
+
+      detailEl.innerHTML = '';
+      detailEl.appendChild(wrapper);
+    }
+
+    // Update pagination controls and page indicator
+    function updatePaginationControls(){
+      pageNumberEl.textContent = currentPage;
+      prevBtn.disabled = isLoading || currentPage <= 1;
+      // nextBtn remains enabled unless loading; API may return empty pages which we handle on render
+    }
+
+    // Wire up button events
+    searchBtn.addEventListener('click', () => {
+      const q = qInput.value.trim();
+      if (!q || isLoading) return;
+      currentPage = 1;
+      performSearch(q, currentPage);
+    });
+
+    // Enter key triggers search
+    qInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') searchBtn.click(); });
+
+    prevBtn.addEventListener('click', () => {
+      if (isLoading || currentPage <= 1) return;
+      currentPage = Math.max(1, currentPage - 1);
+      performSearch(currentQuery, currentPage);
+    });
+    nextBtn.addEventListener('click', () => {
+      if (isLoading) return;
+      currentPage = currentPage + 1;
+      performSearch(currentQuery, currentPage);
+    });
+
+    // Initial state
+    setLoading(false);
+
+    /*
+      Notes:
+      - Pagination: the NASA API supports `page` parameter. We pass the page number when calling the
+        search endpoint: `...?q={query}&media_type=image&page={page}`.
+      - Thumbnails mapping: `renderThumbnails` iterates `collection.items` and picks the first
+        image link from `item.links` (commonly a low-resolution preview) and displays it in the grid.
+      - Full image: when a thumbnail is clicked we call `/asset/{nasa_id}` to receive a list of
+        available files, then choose a high-resolution JPG/PNG.
+    */
+  </script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NASA Image Search</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    #results img { width: 150px; margin: 5px; cursor: pointer; }
+    #details { margin-top: 2em; }
+    .metadata { margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <h1>NASA Image Search</h1>
+  <input type="text" id="searchInput" placeholder="Enter search text...">
+  <button onclick="searchImages()">Search</button>
+  <div id="results"></div>
+  <div id="details"></div>
+
+  <script>
+    async function searchImages() {
+      const query = document.getElementById('searchInput').value;
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = "Searching...";
+      document.getElementById('details').innerHTML = "";
+      const url = `https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=image`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      resultsDiv.innerHTML = "";
+
+      if(data.collection.items.length === 0) {
+        resultsDiv.innerHTML = "No results found.";
+        return;
+      }
+
+      // Show thumbnails with click events
+      data.collection.items.forEach(item => {
+        const thumb = item.links[0].href;
+        const nasa_id = item.data[0].nasa_id;
+        const div = document.createElement('div');
+        div.style.display = 'inline-block';
+
+        const img = document.createElement('img');
+        img.src = thumb;
+        img.onclick = () => showDetails(nasa_id);
+        div.appendChild(img);
+
+        const caption = document.createElement('div');
+        caption.innerText = item.data[0].title;
+        div.appendChild(caption);
+
+        resultsDiv.appendChild(div);
+      });
+    }
+
+    async function showDetails(nasa_id) {
+      const detailsDiv = document.getElementById('details');
+      detailsDiv.innerHTML = "Loading image details...";
+      // Fetch image assets (full size image)
+      const assetResp = await fetch(`https://images-api.nasa.gov/asset/${nasa_id}`);
+      const assetData = await assetResp.json();
+      const imageUrl = assetData.collection.items[0].href;
+
+      // Fetch metadata
+      const metadataResp = await fetch(`https://images-api.nasa.gov/metadata/${nasa_id}`);
+      let metadata = {};
+      try {
+        metadata = await metadataResp.json();
+      } catch (e) {
+        metadata = {};
+      }
+
+      detailsDiv.innerHTML = `
+        <img src="${imageUrl}" style="max-width:400px;">
+        <div class="metadata"><pre>${JSON.stringify(metadata, null, 2)}</pre></div>
+      `;
+    }
+  </script>
+</body>
+</html>

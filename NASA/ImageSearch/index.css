@@ -1,0 +1,50 @@
+:root{
+    --gap:12px;
+    --left-width:420px;
+    --accent:#0b5fff;
+    --muted:#666;
+    --bg:#f7f9fc;
+}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+body{background:var(--bg);color:#111}
+.app{display:flex;gap:var(--gap);height:100vh;padding:var(--gap);box-sizing:border-box}
+/* Two-column layout */
+.left{width:var(--left-width);min-width:260px;display:flex;flex-direction:column;background:#fff;border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(12,20,40,.06)}
+.right{flex:1;display:flex;flex-direction:column;background:#fff;border-radius:8px;padding:18px;box-shadow:0 2px 8px rgba(12,20,40,.06);min-width:0}
+
+/* Search controls */
+.controls{display:flex;gap:8px;align-items:center}
+.controls input[type="search"]{flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px}
+button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+
+/* Results area */
+.results{margin-top:12px;overflow:auto;padding-bottom:12px}
+.thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.thumb{background:#fafafa;border-radius:6px;padding:6px;display:flex;flex-direction:column;align-items:center;cursor:pointer;border:1px solid transparent}
+.thumb:hover{border-color:#e2e8f0}
+.thumb img{width:100%;height:88px;object-fit:cover;border-radius:4px}
+.thumb .t{font-size:12px;color:var(--muted);margin-top:6px;text-align:center;line-height:1.1}
+
+/* Pagination */
+.pagination{display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 0}
+.meta{font-size:13px;color:var(--muted)}
+
+/* Right pane */
+.placeholder{display:flex;align-items:center;justify-content:center;color:var(--muted);height:100%;text-align:center}
+.detail{display:flex;flex-direction:column;gap:12px;height:100%}
+.detail img{max-height:70vh;object-fit:contain;border-radius:6px;background:#000}
+.detail .info h2{margin:0;font-size:18px}
+.detail .info p{margin:0;color:var(--muted)}
+
+/* Loading / error */
+.loading{padding:12px;text-align:center;color:var(--muted)}
+.error{padding:12px;text-align:center;color:#b00020}
+
+/* Responsive: stack on small screens */
+@media (max-width:900px){
+    .app{flex-direction:column}
+    .left{width:100%}
+    .right{width:100%}
+    .detail img{max-height:50vh}
+}

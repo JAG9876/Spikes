@@ -1,0 +1,80 @@
+/* Basic layout and reset */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #222; }
+
+main {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  align-items: flex-start;
+}
+
+/* Left column: search + results (35% width) */
+#search-and-results-section {
+  flex: 0 0 35%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#search-section {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#search-input {
+  flex: 1 1 auto;
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+#search-button {
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+}
+
+#results-section { 
+  flex: 1 1 auto;
+}
+
+/*
+#results-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+*/
+
+.results{margin-top:12px;overflow:auto;padding-bottom:12px}
+.thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.thumb{background:#fafafa;border-radius:6px;padding:6px;display:flex;flex-direction:column;align-items:center;cursor:pointer;border:1px solid transparent}
+.thumb:hover{border-color:#e2e8f0}
+.thumb img{width:100%;height:88px;object-fit:cover;border-radius:4px}
+.thumb .t{font-size:12px;color:var(--muted);margin-top:6px;text-align:center;line-height:1.1}
+
+
+/* Right column: image detail (remaining width ~65%) */
+#image-detail-section {
+  flex: 1 1 65%;
+  max-width: 65%;
+}
+
+#image-detail-placeholder {
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  min-height: 200px;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 800px) {
+  main {
+    flex-direction: column;
+  }
+  #image-detail-section {
+    max-width: none;
+    width: 100%;
+  }
+}

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Image Search Client</title>
+        <link rel="stylesheet" href="styles.css">
+
+        <script src="app.js" defer></script>
+    </head>
+    <body>
+        <header>
+            <h1>Image Search Client</h1>
+        </header>
+        <main>
+            <section id="search-and-results-section">
+                <section id="search-section">
+                    <input type="text" id="search-input" placeholder="Søk etter bilder...">
+                    <button id="search-button" onclick="searchImages()">Søk</button>
+                </section>
+                <section id="results-section" class="results">
+                    <div id="thumbs" class="thumb-grid"></div>
+                </section>
+            </section>
+            <section id="image-detail-section">
+                <div id="image-detail-placeholder">Velg et bilde fra søkeresultatene</div>
+            </section>
+        </main>
+        <footer>
+            <p>&copy; 2025 Image Search Client</p>
+        </footer>
+    </body>
+</html>

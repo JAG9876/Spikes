@@ -68,6 +68,10 @@ main {
   min-height: 200px;
 }
 
+/* Loading / error */
+.loading{padding:12px;text-align:center;color:var(--muted)}
+.error{padding:12px;text-align:center;color:#b00020}
+
 /* Responsive: stack on small screens */
 @media (max-width: 800px) {
   main {

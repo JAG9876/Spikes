@@ -1,6 +1,7 @@
 // DOM elements
 const thumbsEl = document.getElementById('thumbs');
 const searchBtn = document.getElementById('search-button');
+const statusEl = document.getElementById('status');
 
 let isLoading = false;
 
@@ -21,7 +22,8 @@ async function performSearch(query) {
     setLoading(true);
 
     // Build url for image search
-    const base = 'https://images-api.nasa.gov/search';
+    //const base = 'https://images-api.nasa.gov/search';
+    const base = 'http://localhost:5000/api/search';
     const params = new URLSearchParams({q: query, media_type: 'image'});
 
     try{
@@ -29,28 +31,22 @@ async function performSearch(query) {
         if (!resp.ok) throw new Error(`API error: ${resp.status}`);
         const data = await resp.json();
 
-        // If another newer request was started meanwhile, ignore this response
-        //if (requestId !== lastRequestId) return;
-
         renderThumbnails(data);
     }catch(err){
         thumbsEl.innerHTML = '';
-        //statusEl.style.display = 'block';
-        //statusEl.className = 'error';
-        //statusEl.textContent = 'Error loading results: ' + err.message;
+        statusEl.style.display = 'block';
+        statusEl.className = 'error';
+        statusEl.textContent = 'Error loading results: ' + err.message;
     }finally{
         // restore status style
-        //statusEl.className = 'loading';
+        statusEl.className = 'loading';
         setLoading(false);
-        //updatePaginationControls();
     }
 }
 
 function setLoading(loading){
     isLoading = loading;
     searchBtn.disabled = loading;
-    //prevBtn.disabled = loading || currentPage <= 1;
-    //nextBtn.disabled = loading;
 }
 
 function renderThumbnails(apiData) {

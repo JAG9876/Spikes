@@ -22,26 +22,34 @@ async function performSearch(query) {
     setLoading(true);
 
     // Build url for image search
-    //const base = 'https://images-api.nasa.gov/search';
     const base = 'http://localhost:5000/api/search';
-    const params = new URLSearchParams({q: query, media_type: 'image'});
+    const params = new URLSearchParams({q: query});
 
     try{
         const resp = await fetch(base + '?' + params.toString());
         if (!resp.ok) throw new Error(`API error: ${resp.status}`);
         const data = await resp.json();
 
-        renderThumbnails(data);
+        if (data.errorMessage){
+            setErrorMessage(data.errorMessage);
+            return;
+        }
+
+        renderThumbnails(data.searchResponse);
     }catch(err){
-        thumbsEl.innerHTML = '';
-        statusEl.style.display = 'block';
-        statusEl.className = 'error';
-        statusEl.textContent = 'Error loading results: ' + err.message;
+        setErrorMessage(err.message);
     }finally{
         // restore status style
         statusEl.className = 'loading';
         setLoading(false);
     }
+}
+
+function setErrorMessage(message) {
+    thumbsEl.innerHTML = '';
+    statusEl.style.display = 'block';
+    statusEl.className = 'error';
+    statusEl.textContent = 'Error loading results: ' + message;
 }
 
 function setLoading(loading){

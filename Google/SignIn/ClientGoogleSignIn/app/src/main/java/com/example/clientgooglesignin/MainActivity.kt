@@ -25,6 +25,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.example.clientgooglesignin.ui.theme.ClientGoogleSignInTheme
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import kotlinx.coroutines.coroutineScope
@@ -32,7 +33,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     companion object {
-        const val WEB_CLIENT_ID = "XXXXXXXXX"
+        const val WEB_CLIENT_ID = "935891679520-ur0sfnqsi9kchrtlhtmefdnsqup9771s.apps.googleusercontent.com"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun signIn() {
+        /*
         val googleIdOption: GetGoogleIdOption = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(true)
             .setServerClientId(WEB_CLIENT_ID)
@@ -70,9 +72,14 @@ class MainActivity : ComponentActivity() {
             // nonce string to use when generating a Google ID token
             //.setNonce(nonce)
             .build()
+         */
+        val signInWithGoogleOption: GetSignInWithGoogleOption = GetSignInWithGoogleOption.Builder(WEB_CLIENT_ID)
+            // nonce string to use when generating a Google ID token
+            //.setNonce(nonce)
+            .build()
 
         val request: GetCredentialRequest = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
+            .addCredentialOption(signInWithGoogleOption)
             .build()
 
         val myAuthManager = MyAuthManager(this)
@@ -125,6 +132,8 @@ class MainActivity : ComponentActivity() {
                         // authenticate on your server.
                         val googleIdTokenCredential = GoogleIdTokenCredential
                             .createFrom(credential.data)
+
+                        val b = googleIdTokenCredential
                         // You can use the members of googleIdTokenCredential directly for UX
                         // purposes, but don't use them to store or control access to user
                         // data. For that you first need to validate the token:

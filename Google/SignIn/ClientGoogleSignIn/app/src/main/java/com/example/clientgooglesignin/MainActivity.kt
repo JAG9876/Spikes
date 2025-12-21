@@ -84,7 +84,6 @@ class MainActivity : ComponentActivity() {
 
                 if(credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                     try {
-
                         val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                         Log.e("TAG", "loginSuccess idToken: ${googleIdTokenCredential.idToken}  ${googleIdTokenCredential.displayName}")
                     } catch (e: GoogleIdTokenParsingException) {

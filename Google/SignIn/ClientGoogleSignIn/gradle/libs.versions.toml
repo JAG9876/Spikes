@@ -1,5 +1,5 @@
 [versions]
-agp = "8.8.0"
+agp = "8.13.2"
 credentials = "1.6.0-beta03"
 googleid = "<latest version>"
 kotlin = "2.0.0"

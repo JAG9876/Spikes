@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SignalApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+996723b8c5220305c969e39c309718121d9da086")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e0fc5bf1493916dc113f7e1c30e189de7a76b778")]
 [assembly: System.Reflection.AssemblyProductAttribute("SignalApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SignalApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

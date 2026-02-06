@@ -1,9 +1,10 @@
 import scipy.io.wavfile as wavfile
 import matplotlib.pyplot as plt
 import numpy as np
+import temporal_detection as td
 
 def main():
-    test2()
+    test4()
 
 def get_feature(data):
     x = []
@@ -28,6 +29,27 @@ def get_feature(data):
     y.append(sum)
 
     return (x, y)
+
+def test4():
+    sample_rate1, data1 = wavfile.read('test_files\\audio\\OneClapPianoMobile.wav')
+    amplitude = td.get_amplitude_abs_max(data1, 200)
+
+    x1 = np.linspace(0, 1, len(data1))
+    x2 = np.linspace(0, 1, len(amplitude))
+
+    plt.plot(x1, data1)
+    plt.plot(x2, amplitude)
+    plt.show()
+
+def test3():
+    sample_rate1, data1 = wavfile.read('test_files\\audio\\OneClapPianoMobile.wav')
+
+    amplitude = td.get_amplitude_abs_max(data1, 200)
+    amplitude2 = td.get_amplitude_max(data1, 200)
+
+    plt.plot(amplitude)
+    plt.plot(amplitude2)
+    plt.show()
 
 def test2():
     data1 = [0,0,1,0,1,2,1,-1,-2,0,2,1,-1,-2,0,1]

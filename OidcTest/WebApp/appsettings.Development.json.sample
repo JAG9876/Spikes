@@ -1,0 +1,15 @@
+{
+    "Logging": {
+        "LogLevel": {
+            "Default": "Information",
+            "Microsoft.AspNetCore": "Warning",
+            "Microsoft.AspNetCore.Authentication": "Debug"
+        }
+    },
+    "OidcTest": {
+        "Authority": "https://accounts.google.com",
+        "ClientId": "ClientIdInTheRegister",
+        "ClientSecret": "ClientSecretInTheRegister",
+        "CallbackPath": "/signin-google"
+    }
+}

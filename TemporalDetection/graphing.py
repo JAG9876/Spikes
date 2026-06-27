@@ -7,7 +7,7 @@ import os
 base = os.path.join("test_files", "audio")
 
 mobile_audio = os.path.join(base, "OneClapPianoMobile.wav")
-pc_audio = os.path.join(base, "OneClapStuebordPCMono")
+pc_audio = os.path.join(base, "OneClapStuebordPCMono.wav")
 
 def main():
     test4()

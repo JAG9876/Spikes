@@ -67,7 +67,7 @@ class TemporalDetection():
             case Algorithm.CORRELATION:
                 return algorithm_numpy_correlate(*params)
             case Algorithm.SCI_PI_CORRELATION:
-                return algorithm_scipy_correlate(*params)
+                return self.algorithm_scipy_correlate(*params)
             case Algorithm.AMP_CORRELATION:
                 return algorithm_amp_correlate(*params)
             case Algorithm.AMP_DIFF:
@@ -81,6 +81,7 @@ class TemporalDetection():
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8,9), sharex=True, gridspec_kw={'height_ratios': [1,1,8]})
 
         ax1.axvspan(self.pl_start, self.pl_end, color='tab:orange', alpha=0.25, zorder=0)
+        ax1.set_ylim(-10000, 10000)
         ax1.plot(self.pl_wave, zorder=1) # self.pl_start self.pl_end
 
         start = self.pl_start + self.pl_actual_offs
@@ -93,7 +94,8 @@ class TemporalDetection():
         ymin, ymax = ax2.get_ylim()
         center = (ymin + ymax) / 2
         half = (ymax - ymin) / 4
-        ax2.set_ylim(center - half, center + half)
+        #ax2.set_ylim(center - half, center + half)
+        ax2.set_ylim(-10000, 10000)
 
         ax3.plot(corr)
 
@@ -103,6 +105,13 @@ class TemporalDetection():
         plt.title(f"{self.pl_count}  {self.pl_exp_offs:.3f}")
         plt.tight_layout()
         plt.show()
+
+    def algorithm_scipy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
+        self.plot_it(data1, correlation)
+        max_index = correlation.argmax()
+
+        return (max_index - data2.shape[0]) / sample_freq2
 
     # Finds the offset between data1 and data2 based on the gccphat algorithm
     def algorithm_gccphat(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
@@ -164,12 +173,6 @@ def algorithm_argmax(sample_freq1: int, data1: np.ndarray, sample_freq2: int, da
 
 def algorithm_numpy_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
     correlation = np.correlate(data1.astype(np.int64), data2.astype(np.int64), "full")
-    max_index = correlation.argmax()
-
-    return (max_index - data2.shape[0]) / sample_freq2
-
-def algorithm_scipy_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
-    correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
     max_index = correlation.argmax()
 
     return (max_index - data2.shape[0]) / sample_freq2

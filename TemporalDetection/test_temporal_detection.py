@@ -20,7 +20,8 @@ base = os.path.join("test_files", "audio")
 mobile_audio = os.path.join(base, "OneClapPianoMobile.wav")
 pc_audio = os.path.join(base, "OneClapStuebordPCMono.wav")
 spike_audio = os.path.join(base, "single_pulse_10s_48k_mono16.wav")
-spike_audio = os.path.join(base, "single_sine_and_pulse_10s_48k_mono16.wav")
+sine_and_spike_audio = os.path.join(base, "single_sine_and_pulse_10s_48k_mono16.wav")
+sine_audio = os.path.join(base, "single_sine_10s_48k_mono16.wav")
 
 @pytest.mark.parametrize("wavfile1, wavfile2, full_expected_offset, algorithm", [
         # < 1 second
@@ -53,7 +54,7 @@ def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algo
         # 28 seconds, error = 60%
         (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT),
         (mobile_audio, mobile_audio, 0.0, td.Algorithm.GCCPHAT),
-        (spike_audio, spike_audio, 0.0, td.Algorithm.GCCPHAT)
+        (sine_audio, sine_audio, 0.0, td.Algorithm.GCCPHAT)
     ])
 def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algorithm):
     errors = []
@@ -67,20 +68,20 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     w_length = w2.shape[0]
 
     sample_rate2 = s_rate2
-    #wave2 = td.band_reject(sample_rate2, w2, 5, 5)
-    wave2 = w2
+    wave2 = td.band_reject(sample_rate2, w2, 5, 5)
+    #wave2 = w2
     wave2_length = wave2.shape[0]
 
     start_time = time.perf_counter()
 
     # Cut from the start of wave2
-    '''
+    #'''
     for i in range(0, 10):
         start = int(wave2_length * i / 10)
         end = wave2_length
         expected_offset = full_expected_offset + start / sample_rate2
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
@@ -94,15 +95,15 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = int(wave2_length * i / 10)
         expected_offset = full_expected_offset
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
         count_total += 1
-    '''
+    #'''
     
-    # Pan wave2 with a 1/10th window
-    NUM_SECTION = 5
+    # Pan wave2 with a 1/NUM_SECTION'th window
+    NUM_SECTION = 10
     for i in range(0,NUM_SECTION):
         start = int(wave2_length * i / NUM_SECTION)
         end = int(start + wave2_length / NUM_SECTION)

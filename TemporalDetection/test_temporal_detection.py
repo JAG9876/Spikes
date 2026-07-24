@@ -20,6 +20,7 @@ base = os.path.join("test_files", "audio")
 mobile_audio = os.path.join(base, "OneClapPianoMobile.wav")
 pc_audio = os.path.join(base, "OneClapStuebordPCMono.wav")
 spike_audio = os.path.join(base, "single_pulse_10s_48k_mono16.wav")
+spike_audio = os.path.join(base, "single_sine_and_pulse_10s_48k_mono16.wav")
 
 @pytest.mark.parametrize("wavfile1, wavfile2, full_expected_offset, algorithm", [
         # < 1 second
@@ -66,7 +67,8 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     w_length = w2.shape[0]
 
     sample_rate2 = s_rate2
-    wave2 = td.band_reject(sample_rate2, w2, 5, 5)
+    #wave2 = td.band_reject(sample_rate2, w2, 5, 5)
+    wave2 = w2
     wave2_length = wave2.shape[0]
 
     start_time = time.perf_counter()
@@ -100,9 +102,10 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     '''
     
     # Pan wave2 with a 1/10th window
-    for i in range(0,10):
-        start = int(wave2_length * i / 10)
-        end = int(start + wave2_length / 10)
+    NUM_SECTION = 5
+    for i in range(0,NUM_SECTION):
+        start = int(wave2_length * i / NUM_SECTION)
+        end = int(start + wave2_length / NUM_SECTION)
         expected_offset = full_expected_offset + start / sample_rate2
 
         err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.signal as sps
 from enum import Enum
+import matplotlib.pyplot as plt
 
 class Algorithm(Enum):
     DEFAULT = 0
@@ -40,31 +41,128 @@ def band_reject(sample_freq: int, data: np.ndarray, reject_freq, bandwidth_hz):
 
     return sps.filtfilt(b, a, signal, axis=0)
 
-# Returns the generic time difference in seconds between two waveforms
 
-def get_offset(wave1: tuple[int, np.ndarray], wave2: tuple[int, np.ndarray], algorithm: Algorithm):
-    data1 = wave1[1]
-    data2 = wave2[1]
-    sample_rate1 = wave1[0]
-    sample_rate2 = wave2[0]
+class TemporalDetection():
+    def __init__(self, pl_wave, pl_start, pl_end, pl_actual_offs, pl_expected_offset, pl_count):
+        self.pl_wave = pl_wave
+        self.pl_start = pl_start
+        self.pl_end = pl_end
+        self.pl_actual_offs = pl_actual_offs
+        self.pl_exp_offs = pl_expected_offset
+        self.pl_count = pl_count
 
-    params = (sample_rate1, data1, sample_rate2, data2)
+    # Returns the generic time difference in seconds between two waveforms
 
-    match algorithm:
-        case Algorithm.ARGMAX:
-            return algorithm_argmax(*params)
-        case Algorithm.CORRELATION:
-            return algorithm_numpy_correlate(*params)
-        case Algorithm.SCI_PI_CORRELATION:
-            return algorithm_scipy_correlate(*params)
-        case Algorithm.AMP_CORRELATION:
-            return algorithm_amp_correlate(*params)
-        case Algorithm.AMP_DIFF:
-            return algorithm_amp_diff(*params)
-        case Algorithm.GCCPHAT:
-            return algorithm_gccphat(*params)
-        case _:
-            return None
+    def get_offset(self, wave1: tuple[int, np.ndarray], wave2: tuple[int, np.ndarray], algorithm: Algorithm):
+        data1 = wave1[1]
+        data2 = wave2[1]
+        sample_rate1 = wave1[0]
+        sample_rate2 = wave2[0]
+
+        params = (sample_rate1, data1, sample_rate2, data2)
+
+        match algorithm:
+            case Algorithm.ARGMAX:
+                return algorithm_argmax(*params)
+            case Algorithm.CORRELATION:
+                return algorithm_numpy_correlate(*params)
+            case Algorithm.SCI_PI_CORRELATION:
+                return self.algorithm_scipy_correlate(*params)
+            case Algorithm.AMP_CORRELATION:
+                return algorithm_amp_correlate(*params)
+            case Algorithm.AMP_DIFF:
+                return algorithm_amp_diff(*params)
+            case Algorithm.GCCPHAT:
+                return self.algorithm_gccphat(*params)
+            case _:
+                return None
+
+    def plot_it(self, data1, corr):
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8,9), sharex=True, gridspec_kw={'height_ratios': [1,1,8]})
+
+        ax1.axvspan(self.pl_start, self.pl_end, color='tab:orange', alpha=0.25, zorder=0)
+        ax1.set_ylim(-10000, 10000)
+        ax1.plot(self.pl_wave, zorder=1) # self.pl_start self.pl_end
+
+        start = self.pl_start + self.pl_actual_offs
+        end = self.pl_end + self.pl_actual_offs
+        ax2.axvspan(start, end, color='tab:orange', alpha=0.25, zorder=0)
+        ax2.plot(data1)
+        #ax2.plot(np.asarray(data1, dtype=np.float64) * 2.0)
+
+        # Zoom in y-axis-wise (double)
+        ymin, ymax = ax2.get_ylim()
+        center = (ymin + ymax) / 2
+        half = (ymax - ymin) / 4
+        #ax2.set_ylim(center - half, center + half)
+        ax2.set_ylim(-10000, 10000)
+
+        ax3.plot(corr)
+
+        xmax = len(corr) - 1
+        ax3.set_xlim(0,xmax)
+
+        plt.title(f"{self.pl_count}  {self.pl_exp_offs:.3f}")
+        plt.tight_layout()
+        plt.show()
+
+    def algorithm_scipy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
+        self.plot_it(data1, correlation)
+        max_index = correlation.argmax()
+
+        return (max_index - data2.shape[0]) / sample_freq2
+
+    # Finds the offset between data1 and data2 based on the gccphat algorithm
+    def algorithm_gccphat(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        if data1.size == 0 or data2.size == 0:
+            return 0
+
+        # Convert potential multi-channel input to mono and normalize dtype.
+        ref = np.asarray(data1, dtype=np.float64)
+        sig = np.asarray(data2, dtype=np.float64)
+        if ref.ndim > 1:
+            ref = ref.mean(axis=1)
+        if sig.ndim > 1:
+            sig = sig.mean(axis=1)
+
+        fs = sample_freq1
+        if sample_freq1 != sample_freq2:
+            target_len = int(round(sig.shape[0] * sample_freq1 / sample_freq2))
+            if target_len <= 0:
+                return 0
+            sig = sps.resample(sig, target_len)
+
+        ref_len = ref.shape[0]
+        sig_len = sig.shape[0]
+        fft_len = ref_len + sig_len - 1
+
+        ref_fft = np.fft.rfft(ref, n=fft_len)
+        sig_fft = np.fft.rfft(sig, n=fft_len)
+        cross_spectrum = ref_fft * np.conj(sig_fft)
+
+        magnitude = np.abs(cross_spectrum)
+        magnitude[magnitude < 1e-15] = 1e-15
+        correlation = np.fft.irfft(cross_spectrum / magnitude, n=fft_len)
+
+        # Reorder to match integer lag range [-(len(sig)-1), len(ref)-1].
+        correlation = np.concatenate((correlation[-(sig_len - 1):], correlation[:ref_len]))
+        lags = np.arange(-(sig_len - 1), ref_len)
+        lag = lags[np.argmax(np.abs(correlation))]
+
+        self.plot_it(data1, correlation)
+        '''
+        #if (runCount in [8,17,27]):
+        if (True):
+            plt.title(f"{runCount}  {exp_offs:.3f} - {(lag / fs):.3f}")
+            plt.plot(data1)
+            plt.plot(correlation, scaley=True)
+            #plt.show(block=False)
+            plt.show()
+        runCount += 1
+        '''
+        return lag / fs
+
 
 # Finds max value of both waves and calculates the time difference
 def algorithm_argmax(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
@@ -75,12 +173,6 @@ def algorithm_argmax(sample_freq1: int, data1: np.ndarray, sample_freq2: int, da
 
 def algorithm_numpy_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
     correlation = np.correlate(data1.astype(np.int64), data2.astype(np.int64), "full")
-    max_index = correlation.argmax()
-
-    return (max_index - data2.shape[0]) / sample_freq2
-
-def algorithm_scipy_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
-    correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
     max_index = correlation.argmax()
 
     return (max_index - data2.shape[0]) / sample_freq2
@@ -107,45 +199,6 @@ def algorithm_amp_diff(sample_freq1: int, data1: np.ndarray, sample_freq2: int, 
     result = min_index * batch_size / sample_freq2
 
     return result
-
-# Finds the offset between data1 and data2 based on the gccphat algorithm
-def algorithm_gccphat(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
-    if data1.size == 0 or data2.size == 0:
-        return 0
-
-    # Convert potential multi-channel input to mono and normalize dtype.
-    ref = np.asarray(data1, dtype=np.float64)
-    sig = np.asarray(data2, dtype=np.float64)
-    if ref.ndim > 1:
-        ref = ref.mean(axis=1)
-    if sig.ndim > 1:
-        sig = sig.mean(axis=1)
-
-    fs = sample_freq1
-    if sample_freq1 != sample_freq2:
-        target_len = int(round(sig.shape[0] * sample_freq1 / sample_freq2))
-        if target_len <= 0:
-            return 0
-        sig = sps.resample(sig, target_len)
-
-    ref_len = ref.shape[0]
-    sig_len = sig.shape[0]
-    fft_len = ref_len + sig_len - 1
-
-    ref_fft = np.fft.rfft(ref, n=fft_len)
-    sig_fft = np.fft.rfft(sig, n=fft_len)
-    cross_spectrum = ref_fft * np.conj(sig_fft)
-
-    magnitude = np.abs(cross_spectrum)
-    magnitude[magnitude < 1e-15] = 1e-15
-    correlation = np.fft.irfft(cross_spectrum / magnitude, n=fft_len)
-
-    # Reorder to match integer lag range [-(len(sig)-1), len(ref)-1].
-    correlation = np.concatenate((correlation[-(sig_len - 1):], correlation[:ref_len]))
-    lags = np.arange(-(sig_len - 1), ref_len)
-
-    lag = lags[np.argmax(np.abs(correlation))]
-    return lag / fs
 
 def get_diffs(arr1: np.ndarray, arr2: np.ndarray):
     diffs = []

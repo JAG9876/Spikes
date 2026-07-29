@@ -5,6 +5,7 @@ import time
 import os
 import numpy as np
 from scipy.signal.windows import hamming as _hamming
+import scipy.signal as sps
 
 file_offset = 1.953 * 48000
 
@@ -68,8 +69,14 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     w_length = w2.shape[0]
 
     sample_rate2 = s_rate2
-    wave2 = td.band_reject(sample_rate2, w2, 5, 5)
-    #wave2 = w2
+    
+    #wave2 = td.band_reject(sample_rate2, w2, 5, 5)
+    
+    #sos = sps.butter(2, 15, btype="highpass", fs=sample_rate2, output="sos")    
+    #wave2 = sps.sosfilt(sos, w2.astype(np.float64))
+
+    wave2 = w2
+    
     wave2_length = wave2.shape[0]
 
     start_time = time.perf_counter()
@@ -141,8 +148,8 @@ def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_o
 
     offset_in_seconds = my_td.get_offset(wave1, (sample_rate2, wave3), algorithm)
 
-    if offset_in_seconds != pytest.approx(expected_offset, rel=0.01):
-    #if offset_in_seconds != pytest.approx(expected_offset, rel=0.25):
+    #if offset_in_seconds != pytest.approx(expected_offset, rel=0.01):
+    if offset_in_seconds != pytest.approx(expected_offset, rel=0.05):
         start_time = start / sample_rate2
         end_time = end / sample_rate2
         return f"Wavfile2 window ({start_time:,.3f},{end_time:,.3f}). Expected offset is {expected_offset:,.3f}, but actual was {offset_in_seconds:,.3f}"

@@ -65,7 +65,7 @@ class TemporalDetection():
             case Algorithm.ARGMAX:
                 return algorithm_argmax(*params)
             case Algorithm.CORRELATION:
-                return algorithm_numpy_correlate(*params)
+                return self.algorithm_numpy_correlate(*params)
             case Algorithm.SCI_PI_CORRELATION:
                 return self.algorithm_scipy_correlate(*params)
             case Algorithm.AMP_CORRELATION:
@@ -77,7 +77,7 @@ class TemporalDetection():
             case _:
                 return None
 
-    def plot_it(self, data1, corr):
+    def plot_it(self, data1, corr, picked_index, *extra_arguments):
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8,9), sharex=True, gridspec_kw={'height_ratios': [1,1,8]})
 
         ax1.axvspan(self.pl_start, self.pl_end, color='tab:orange', alpha=0.25, zorder=0)
@@ -98,20 +98,122 @@ class TemporalDetection():
         ax2.set_ylim(-10000, 10000)
 
         ax3.plot(corr)
+        if picked_index is not None and 0 <= picked_index < len(corr):
+            ax3.plot(picked_index, corr[picked_index], marker='o', color='red', markersize=7, zorder=3)
 
         xmax = len(corr) - 1
         ax3.set_xlim(0,xmax)
+
+        should_i_draw = len(extra_arguments) > 0
+        if should_i_draw:
+            # 2nd order "butterworth" lowpass filter at 500hz applied to correlation signal (corr)
+            #sos = sps.butter(N=2, Wn=500, btype="low", fs=48000, output="sos")
+            #my_signal = sps.sosfiltfilt(sos=sos, x=corr)
+
+            #my_signal = np.multiply(np.diff(corr, n=1), 2.5)
+
+            # RMS rolling average of corr
+            avg_window_size = 48000
+            rollinrollinrollin = np.square(corr / 1e10)
+            avg_window = np.ones(avg_window_size) / avg_window_size
+            moving_average = np.convolve(rollinrollinrollin, avg_window, mode="valid")
+            moving_average = np.sqrt(moving_average)
+
+            decimation_scale = 40
+            #decimated = sps.decimate(corr, decimation_scale) # 40x decimation (scales down samplerate by 40x)
+            decimated = sps.decimate(moving_average, decimation_scale) # 40x decimation (scales down samplerate by 40x)
+            my_signal = np.zeros(len(corr) // decimation_scale)
+
+            #window_size = (end - start) // decimation_scale
+            window_size = 1500 # stupid
+            for j in range(window_size // 2, len(my_signal) - window_size // 2):
+                i = j - window_size // 2
+
+                window = sps.windows.hamming(window_size // 2)
+                left_side           = window * decimated[i:i + window_size // 2]
+                right_side_reversed = window * decimated[i + window_size // 2:i + window_size][::-1]
+
+                #sum = np.sum(np.abs(left_side - right_side_reversed))
+                #symmetricness = 1e+20 / max(0.00000001, sum)
+                rms_error = np.sqrt(np.mean((left_side - right_side_reversed) ** 2))
+                symmetricness = 1e+18 / max(0.0000001, rms_error)
+                my_signal[j] = symmetricness
+
+            #my_signal = np.repeat(my_signal, decimation_scale) # scale back up to normal samplerate
+            my_signal = np.repeat(decimated, decimation_scale) * 1e10
+            #shortest = min(len(my_signal), len(corr))
+            #my_signal[:shortest] *= corr[:shortest]
+            #my_signal /= 10
+            
+            plt.plot(my_signal)
 
         plt.title(f"{self.pl_count}  {self.pl_exp_offs:.3f}")
         plt.tight_layout()
         plt.show()
 
-    def algorithm_scipy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
-        correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
-        self.plot_it(data1, correlation)
+    def algorithm_numpy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        correlation = np.correlate(data1.astype(np.int64), data2.astype(np.int64), "full")
         max_index = correlation.argmax()
+        self.plot_it(data1, correlation, max_index)
 
         return (max_index - data2.shape[0]) / sample_freq2
+
+    def algorithm_scipy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
+        #correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full', 'direct')
+        #correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'same', 'direct')
+        #correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'valid', 'direct')
+
+        '''
+        Pick the n highest peaks (highest positives and lowest negatives)
+        For each peak:
+            peakValue = the peak value
+            rms_range = pick the range x milliseconds before and after the peak
+            rms_value = rms_range.sum(x => x*x)
+            peak_score = peakValue / rms_value
+        '''
+        peak_indices = self.get_peak_indices(correlation, 10_000, 5)
+
+        max_index = self.get_best_peak_index(peak_indices, correlation)
+
+        self.plot_it(data1, correlation, max_index, "PLEASE ENABLE LOWPASS FILTER PLOT")
+
+
+        # max_index = correlation.argmax()
+
+        return (max_index - data2.shape[0]) / sample_freq2
+
+    def get_best_peak_index(self, peak_indices, correlation):
+        best_score = 0
+        best_peak_index = -1
+
+        for peak_index in peak_indices:
+            peak_value = correlation[peak_index]
+
+            rms_range = 10_000
+            start_index = max(0, peak_index - rms_range)
+            end_index = min(len(correlation)-1, peak_index + rms_range)
+            rms = np.sqrt(np.mean(np.square(correlation[start_index:end_index])))
+
+            score = peak_value / rms
+
+            if score > best_score:
+                best_score = score
+                best_peak_index = peak_index
+
+        return best_peak_index
+
+    '''
+    Returns list of indices (up to max_peaks_returned items)
+    '''
+    def get_peak_indices(self, correlation: np.ndarray, distance_between_peaks, max_peaks_returned):
+        peak_indices, props = sps.find_peaks(correlation, distance=distance_between_peaks, height=-np.inf)
+        sort_indices = np.argsort(props["peak_heights"])[::-1]
+        sorted_peak_indices = peak_indices[sort_indices]
+
+        num_peaks = min(len(sorted_peak_indices), max_peaks_returned)
+        return sorted_peak_indices[:num_peaks]
+
 
     # Finds the offset between data1 and data2 based on the gccphat algorithm
     def algorithm_gccphat(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
@@ -150,7 +252,8 @@ class TemporalDetection():
         lags = np.arange(-(sig_len - 1), ref_len)
         lag = lags[np.argmax(np.abs(correlation))]
 
-        self.plot_it(data1, correlation)
+        picked_index = int(np.where(lags == lag)[0][0])
+        self.plot_it(data1, correlation, picked_index)
         '''
         #if (runCount in [8,17,27]):
         if (True):
@@ -170,12 +273,6 @@ def algorithm_argmax(sample_freq1: int, data1: np.ndarray, sample_freq2: int, da
     max2InSeconds = data2.argmax() / sample_freq2
 
     return max1InSeconds - max2InSeconds
-
-def algorithm_numpy_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
-    correlation = np.correlate(data1.astype(np.int64), data2.astype(np.int64), "full")
-    max_index = correlation.argmax()
-
-    return (max_index - data2.shape[0]) / sample_freq2
 
 # Creates shorter volume envelopes and correlates between them
 def algorithm_amp_correlate(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):

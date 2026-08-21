@@ -39,6 +39,8 @@ mb_audio = os.path.join(base, "mB_reversed.wav")
         # ? seconds
         (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT),
         (ma_audio, mb_audio, 1.953, td.Algorithm.GCCPHAT),
+        # ? seconds
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.FFT),
     ])
 def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algorithm):
     wave1 = wavfile.read(wavfile1)
@@ -60,7 +62,9 @@ def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algo
         # 28 seconds, error = 60%
         (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT),
         (mobile_audio, mobile_audio, 0.0, td.Algorithm.GCCPHAT),
-        (sine_audio, sine_audio, 0.0, td.Algorithm.GCCPHAT)
+        (sine_audio, sine_audio, 0.0, td.Algorithm.GCCPHAT),
+        # ? minutes, error = ?
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.FFT),
     ])
 def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algorithm):
     errors = []

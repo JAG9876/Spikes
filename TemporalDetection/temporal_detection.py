@@ -2,6 +2,7 @@ import numpy as np
 import scipy.signal as sps
 from enum import Enum
 import matplotlib.pyplot as plt
+from scipy import fft
 
 class Algorithm(Enum):
     DEFAULT = 0
@@ -11,6 +12,7 @@ class Algorithm(Enum):
     AMP_CORRELATION = 4
     AMP_DIFF = 5
     GCCPHAT = 6
+    FFT = 7
 
 # Runs a band-reject filter on data and returns a new np.ndarray result
 def band_reject(sample_freq: int, data: np.ndarray, reject_freq, bandwidth_hz):
@@ -74,6 +76,8 @@ class TemporalDetection():
                 return algorithm_amp_diff(*params)
             case Algorithm.GCCPHAT:
                 return self.algorithm_gccphat(*params)
+            case Algorithm.FFT:
+                return self.algorithm_fft(*params)
             case _:
                 return None
 
@@ -265,6 +269,52 @@ class TemporalDetection():
         runCount += 1
         '''
         return lag / fs
+
+    def algorithm_fft(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        assert sample_freq1 == sample_freq2
+        audio_1 = data1
+        audio_2 = data2
+        samplerate = sample_freq1
+
+        audio_1_fft_chunks = []
+        audio_2_fft_chunks = []
+
+        chunk_size_milliseconds = 100
+        chunk_size = int(samplerate / (1000 / chunk_size_milliseconds))
+
+        for i in range(int(len(audio_1) / chunk_size)):
+            chunk = fft.fft(audio_1[i*chunk_size:i*chunk_size + chunk_size])
+            audio_1_fft_chunks.append(chunk)
+
+        for i in range(int(len(audio_2) / chunk_size)):
+            chunk = fft.fft(audio_2[i*chunk_size:i*chunk_size + chunk_size])
+            audio_2_fft_chunks.append(chunk)
+
+        correlation = []
+        for i in range(len(audio_1_fft_chunks) - len(audio_2_fft_chunks)):
+            my_sum = 0
+            for j in range(len(audio_2_fft_chunks)):
+                fft1 = audio_1_fft_chunks[i+j]
+                fft2 = audio_2_fft_chunks[j]
+
+                fft1_amplitudes = (2.0 / len(fft1)) * np.abs(fft1[:len(fft1)//2])
+                fft2_amplitudes = (2.0 / len(fft2)) * np.abs(fft2[:len(fft2)//2])
+                my_sum += np.correlate(fft1_amplitudes, fft2_amplitudes)
+
+            correlation.append(my_sum)
+
+        peak = 0
+        peak_index = 0
+        for i in range(len(correlation)):
+            if abs(correlation[i]) > peak:
+                peak = abs(correlation[i])
+                peak_index = i
+
+        #plt.plot(correlation)
+        #plt.show()
+
+        offset_samples = peak_index * chunk_size
+        return offset_samples / samplerate
 
 
 # Finds max value of both waves and calculates the time difference

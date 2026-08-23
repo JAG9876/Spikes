@@ -180,7 +180,31 @@ class TemporalDetection():
 
         max_index = self.get_best_peak_index(peak_indices, correlation)
 
-        self.plot_it(data1, correlation, max_index, "PLEASE ENABLE LOWPASS FILTER PLOT")
+        #self.plot_it(data1, correlation, max_index, "PLEASE ENABLE LOWPASS FILTER PLOT")
+        self.plot_it(data1, correlation, max_index)
+
+        # For each of the 5 highest peaks, pick +-30.000 samples on each side and correlate against its own reverse.
+        center_index = 30_000
+        for i in range(5):
+            index_mid = peak_indices[i]
+            index_start = index_mid - center_index
+            index_end = index_mid + center_index
+
+            #window = sps.windows.hamming(2*center_index)
+
+            #corr = window * correlation[index_start:index_end]
+            corr = correlation[index_start:index_end]
+            corr_reversed = corr[::-1]
+            #symmetry_correlation = np.abs(sps.correlate(corr, corr_reversed, mode='full', method='fft'))
+            symmetry_correlation = sps.correlate(corr, corr_reversed, mode='full', method='fft')
+            # aggregate the values on the left side and also on the right side
+            left_aggregated = np.array(symmetry_correlation[0:2*center_index]).sum()
+            right_aggregated = np.array(symmetry_correlation[2*center_index:]).sum()
+            diff = abs(left_aggregated - right_aggregated)
+            # compare the two aggregated values - the more equal, the more symmetry
+            self.plot_it(data1, symmetry_correlation, index_mid)
+
+
 
 
         # max_index = correlation.argmax()

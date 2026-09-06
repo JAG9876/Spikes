@@ -390,7 +390,15 @@ class TemporalDetection():
         spectral_correlation_padded = np.repeat(spectral_correlation, repeat_factor)[:expected_len]
         assert(expected_len == len(spectral_correlation_padded))
 
+
         # plottable correlation: spectral_correlation_padded
+
+        spectral_correlation_padded = np.pad(spectral_correlation_padded, (0, len(audio_2)))
+        self.plot_it(data1, spectral_correlation_padded, offset_samples)
+
+        #plt.plot(spectral_correlation_padded)
+        #plt.show()
+
         return offset_samples / samplerate
 
 # Finds max value of both waves and calculates the time difference

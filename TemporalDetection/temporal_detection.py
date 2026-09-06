@@ -1,7 +1,9 @@
 import numpy as np
 import scipy.signal as sps
+import sounddevice as sd
 from enum import Enum
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from scipy import fft
 
 class Algorithm(Enum):
@@ -52,6 +54,7 @@ class TemporalDetection():
         self.pl_actual_offs = pl_actual_offs
         self.pl_exp_offs = pl_expected_offset
         self.pl_count = pl_count
+        self.sample_rate = None
 
     # Returns the generic time difference in seconds between two waveforms
 
@@ -81,8 +84,13 @@ class TemporalDetection():
             case _:
                 return None
 
+    def on_button1_click(self, event):
+        segment = self.pl_wave[self.pl_start:self.pl_end]
+        sd.play(segment, self.sample_rate)
+    
     def plot_it(self, data1, corr, picked_index, *extra_arguments):
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8,9), sharex=True, gridspec_kw={'height_ratios': [1,1,8]})
+        plt.subplots_adjust(bottom=0.2)
 
         ax1.axvspan(self.pl_start, self.pl_end, color='tab:orange', alpha=0.25, zorder=0)
         ax1.set_ylim(-10000, 10000)
@@ -107,6 +115,17 @@ class TemporalDetection():
 
         xmax = len(corr) - 1
         ax3.set_xlim(0,xmax)
+
+        ax_button1 = plt.axes([0.2, 0.05, 0.1, 0.05])
+        btn1 = Button(ax_button1, 'Play audio 1')
+        btn1.on_clicked(self.on_button1_click)
+
+        ax_button2 = plt.axes([0.4, 0.05, 0.1, 0.05])
+        btn2 = Button(ax_button2, 'Play audio 2')
+        def on_button2_click(event):
+            segment = data1[start:end]
+            sd.play(segment, self.sample_rate)
+        btn2.on_clicked(on_button2_click)
 
         should_i_draw = len(extra_arguments) > 0
         if should_i_draw:
@@ -156,6 +175,7 @@ class TemporalDetection():
         plt.show()
 
     def algorithm_numpy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        self.sample_rate = sample_freq2
         correlation = np.correlate(data1.astype(np.int64), data2.astype(np.int64), "full")
         max_index = correlation.argmax()
         self.plot_it(data1, correlation, max_index)
@@ -163,6 +183,7 @@ class TemporalDetection():
         return (max_index - data2.shape[0]) / sample_freq2
 
     def algorithm_scipy_correlate(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        self.sample_rate = sample_freq2
         correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full')
         #correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'full', 'direct')
         #correlation = sps.correlate(data1.astype(np.int64), data2.astype(np.int64), 'same', 'direct')
@@ -177,13 +198,16 @@ class TemporalDetection():
             peak_score = peakValue / rms_value
         '''
         peak_indices = self.get_peak_indices(correlation, 10_000, 5)
+        max_index = peak_indices[0]
 
-        max_index = self.get_best_peak_index(peak_indices, correlation)
+        #max_index = self.get_best_peak_index(peak_indices, correlation)
 
         #self.plot_it(data1, correlation, max_index, "PLEASE ENABLE LOWPASS FILTER PLOT")
         self.plot_it(data1, correlation, max_index)
 
+        '''
         # For each of the 5 highest peaks, pick +-30.000 samples on each side and correlate against its own reverse.
+        best_score_value = 0
         center_index = 30_000
         for i in range(5):
             index_mid = peak_indices[i]
@@ -192,20 +216,41 @@ class TemporalDetection():
 
             #window = sps.windows.hamming(2*center_index)
 
+            # Find symmetry
             #corr = window * correlation[index_start:index_end]
-            corr = correlation[index_start:index_end]
+            corr = correlation[index_start:index_end] / 1e9
             corr_reversed = corr[::-1]
-            #symmetry_correlation = np.abs(sps.correlate(corr, corr_reversed, mode='full', method='fft'))
-            symmetry_correlation = sps.correlate(corr, corr_reversed, mode='full', method='fft')
-            # aggregate the values on the left side and also on the right side
-            left_aggregated = np.array(symmetry_correlation[0:2*center_index]).sum()
-            right_aggregated = np.array(symmetry_correlation[2*center_index:]).sum()
-            diff = abs(left_aggregated - right_aggregated)
+            symmetry_correlation = np.abs(sps.correlate(corr, corr_reversed, mode='full', method='fft'))
+            #symmetry_correlation = sps.correlate(corr, corr_reversed, mode='full', method='fft')
+            #amplitude, _ = sps.envelope(symmetry_correlation, n_out=100)
+            sos = sps.butter(N=2, Wn=10, btype="lowpass", fs=120_000, output="sos")
+            amplitude = sps.sosfiltfilt(sos, symmetry_correlation, padtype=None)
+
+            # Normalize the amplitude values to maximum 1, minimum 0 and find with a number how similar it is to a standard distribution curve that is centered in the middle of the array
+            amplitude_min = amplitude.min()
+            amplitude_max = amplitude.max()
+            normalized_amplitude = (amplitude - amplitude_min) / (amplitude_max - amplitude_min)
+
+            x = np.arange(len(normalized_amplitude))
+            mean = (len(normalized_amplitude) - 1) / 2
+            sigma = np.sqrt(np.sum(normalized_amplitude * (x - mean) ** 2) / np.sum(normalized_amplitude))
+            #sigma *= 0.5 # Makes the gaussion curve more narrow
+            gaussian = np.exp(-0.5 * ((x - mean) / sigma) ** 2)
+
+            gaussian_similarity = 1 - np.mean(np.abs(normalized_amplitude - gaussian))
+            if gaussian_similarity > best_score_value:
+                best_score_value = gaussian_similarity
+                max_index = index_mid
+
             # compare the two aggregated values - the more equal, the more symmetry
-            self.plot_it(data1, symmetry_correlation, index_mid)
-
-
-
+            self.plot_it(data1, symmetry_correlation, max_index)
+            remember = self.pl_exp_offs
+            self.pl_exp_offs = gaussian_similarity
+            #self.plot_it(data1, amplitude, max_index)
+            self.plot_it(data1, normalized_amplitude, max_index)
+            self.plot_it(data1, gaussian, max_index)
+            self.pl_exp_offs = remember
+        '''
 
         # max_index = correlation.argmax()
 
@@ -245,6 +290,7 @@ class TemporalDetection():
 
     # Finds the offset between data1 and data2 based on the gccphat algorithm
     def algorithm_gccphat(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
+        self.sample_rate = sample_freq2
         if data1.size == 0 or data2.size == 0:
             return 0
 

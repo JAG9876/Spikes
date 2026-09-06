@@ -103,13 +103,13 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     '''
 
     # Cut from the start of wave2
-    '''
+    #'''
     for i in range(0, 10):
         start = int(wave2_length * i / 10)
         end = wave2_length
         expected_offset = full_expected_offset + start / sample_rate2
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
@@ -123,7 +123,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = int(wave2_length * i / 10)
         expected_offset = full_expected_offset
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
@@ -137,7 +137,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = int(start + wave2_length / NUM_SECTION)
         expected_offset = full_expected_offset + start / sample_rate2
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)

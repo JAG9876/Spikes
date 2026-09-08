@@ -344,62 +344,91 @@ class TemporalDetection():
         # This algorithm requires both samplerates to be identical.
         # If they aren't, one of the audio clips needs oversampling/downsampling to match
         assert(sample_freq1 == sample_freq2)
-        audio_1 = data1
-        audio_2 = data2
         samplerate = sample_freq1
+        audio_1 = np.asarray(data1, dtype=np.float32)
+        audio_2 = np.asarray(data2, dtype=np.float32)
 
         # Parameters for STFT
         nperseg = 512
-        noverlap = nperseg // 2
-        
-        # Compute STFT
-        f, t1, Sxx1 = sps.spectrogram(audio_1, samplerate, nperseg=nperseg, noverlap=noverlap)
-        f, t2, Sxx2 = sps.spectrogram(audio_2, samplerate, nperseg=nperseg, noverlap=noverlap)
-        
-        # Normalize each frame to unit norm (makes it amplitude-invariant)
-        Sxx1 = Sxx1 / np.sqrt(np.sum(Sxx1**2, axis=0, keepdims=True) + 1e-10)
-        Sxx2 = Sxx2 / np.sqrt(np.sum(Sxx2**2, axis=0, keepdims=True) + 1e-10)
-        
-        # Use log-magnitude for better perceptual matching (humans perceive log-amplitude)
-        Sxx1 = np.log1p(Sxx1)
-        Sxx2 = np.log1p(Sxx2)
-        
-        # Re-normalize after log
-        Sxx1 = Sxx1 / np.sqrt(np.sum(Sxx1**2, axis=0, keepdims=True) + 1e-10)
-        Sxx2 = Sxx2 / np.sqrt(np.sum(Sxx2**2, axis=0, keepdims=True) + 1e-10)
-        
-        # Slide Sxx2 across Sxx1 and compute correlation
-        num_frames_1 = Sxx1.shape[1]
-        num_frames_2 = Sxx2.shape[1]
-        num_positions = num_frames_1 - num_frames_2 + 1
-        
-        spectral_correlation = np.zeros(num_positions)
-        
-        for i in range(num_positions):
-            window_1 = Sxx1[:, i:i+num_frames_2]
-            spectral_correlation[i] = np.sum(window_1 * Sxx2)
-        
-        # Find peak
-        frame_offset = np.argmax(spectral_correlation)
-        offset_seconds = t1[frame_offset]
-        offset_samples = int(offset_seconds * samplerate)
-        
-        # Pad to expected length
-        expected_len = len(audio_1) - len(audio_2) + 1
-        repeat_factor = expected_len // len(spectral_correlation) + 1
-        spectral_correlation_padded = np.repeat(spectral_correlation, repeat_factor)[:expected_len]
-        assert(expected_len == len(spectral_correlation_padded))
+        noverlap = nperseg * 0.75
 
+        # Compute spectrogram magnitudes (centers of windows -> t arrays are frame-center times)
+        _, t1, S1 = sps.spectrogram(audio_1, samplerate, nperseg=nperseg, noverlap=noverlap, mode='magnitude')
+        _, _, S2 = sps.spectrogram(audio_2, samplerate, nperseg=nperseg, noverlap=noverlap, mode='magnitude')
 
-        # plottable correlation: spectral_correlation_padded
+        # Preprocessing: frame-wise normalization, log-magnitude, re-normalize (as you had)
+        def preprocess(S):
+            S = S / np.sqrt(np.sum(S**2, axis=0, keepdims=True) + 1e-10)
+            S = np.log1p(S)
+            S = S / np.sqrt(np.sum(S**2, axis=0, keepdims=True) + 1e-10)
+            return S
 
-        spectral_correlation_padded = np.pad(spectral_correlation_padded, (0, len(audio_2)))
-        self.plot_it(data1, spectral_correlation_padded, offset_samples)
+        S1 = preprocess(S1)
+        S2 = preprocess(S2)
 
-        #plt.plot(spectral_correlation_padded)
-        #plt.show()
+        F, N1 = S1.shape
+        _, N2 = S2.shape
+        num_positions = N1 - N2 + 1
+        assert num_positions > 0
 
-        return offset_samples / samplerate
+        # Prepare reversed template across frequency axis
+        B_rev = S2[:, ::-1]   # shape (F, N2)
+
+        # FFT-based convolution across frequency bins:
+        conv_len = N1 + N2 - 1
+        # Use next power of two for speed (optional but often faster)
+        L = 1 << int(np.ceil(np.log2(conv_len)))
+
+        # Zero-pad per-frequency time-series to length L
+        A_pad = np.zeros((F, L), dtype=np.float32)
+        B_pad = np.zeros((F, L), dtype=np.float32)
+        A_pad[:, :N1] = S1
+        B_pad[:, :N2] = B_rev  # note: B_rev already reversed along its time axis
+
+        # Batch rFFT along time axis for each frequency bin
+        FA = np.fft.rfft(A_pad, n=L, axis=1)
+        FB = np.fft.rfft(B_pad, n=L, axis=1)
+
+        # Multiply per-frequency, sum across frequencies in frequency-domain, inverse rfft once
+        prod_sum = np.sum(FA * FB, axis=0)          # shape (L_rfft,)
+        conv_all = np.fft.irfft(prod_sum, n=L)     # length L (>= conv_len)
+
+        # valid positions for sliding-correlation correspond to indices [N2-1 ... N1-1]
+        start_idx = N2 - 1
+        end_idx = N1  # python slice exclusive
+        spectral_correlation = conv_all[start_idx:end_idx]  # length num_positions
+
+        i_peak = np.argmax(spectral_correlation)
+        coarse_offset_samples = t1[i_peak] * samplerate
+
+        # Normal time-domain correlation around the coarse estimate
+        def correlation(audio_1, audio_2, center, samplerate):
+            refine_window_sec = 0.1 # How much around the center we want to time-correlate on
+            half_win = refine_window_sec * samplerate
+
+            seg_start = int(max(0, center - half_win))
+            seg_end = int(min(len(audio_1), center + half_win + len(audio_2))) # ensure seg can contain audio_2
+
+            # use FFT-based correlate for speed on moderate sizes
+            corr = sps.correlate(audio_1[seg_start:seg_end], audio_2, mode='valid', method='fft')
+            samples_peak_index = seg_start + np.argmax(corr)
+
+            return samples_peak_index, corr
+
+        center = coarse_offset_samples
+        final_offset_samples, correlation = correlation(audio_1, audio_2, center, samplerate)
+
+        do_plot = False
+        if do_plot:
+            offset_samples_int = int(round(final_offset_samples))
+            expected_len = max(1, len(audio_1) - len(audio_2) + 1)
+            repeat_factor = max(1, expected_len // len(spectral_correlation) + 1)
+            spectral_correlation_padded = np.repeat(spectral_correlation, repeat_factor)[:expected_len]
+            spectral_correlation_padded = np.pad(spectral_correlation_padded, (0, len(audio_2)))
+            #plt.plot(correlation) # Normal time-domain correlation (centered around `center` variable)
+            self.plot_it(data1, spectral_correlation_padded, offset_samples_int) # Frequency domain correlation
+
+        return final_offset_samples / samplerate
 
 # Finds max value of both waves and calculates the time difference
 def algorithm_argmax(sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):

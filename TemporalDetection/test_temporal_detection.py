@@ -114,7 +114,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         if err != None:
             errors.append(err)
         count_total += 1
-        print(f"i={i}")
+        #print(f"i={i}")
         #input("Press Enter to continue")
 
     # Cut from the end of wave2
@@ -151,12 +151,31 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     err_count = len(errors)
     err_percentage = err_count / count_total
 
+    print("\x1b[32mDIFF SUM (seconds):", global_diff_sum_sec, "s\x1b[0m")
+    print("\x1b[32mMax error percent:", global_max_error_percent, "%\x1b[0m")
+
     assert err_percentage < 0.1, f"Errors: {err_percentage:,.2%} ({err_count}/{count_total}). Execution time: {execution_time:.4f} seconds"
 
 runCount = 0
 
+def print_result(expected, actual):
+    global global_max_error_percent
+    pad = 6
+    expected_str = f"{expected:.3f}".ljust(pad, ' ')
+    actual_str = f"{actual:.3f}".ljust(pad, ' ')
+
+    # This percentage matches what pytest.approx(..., rel=...) is comparing with
+    diff = abs(expected - actual)
+    diff_percent = 100 * (diff / expected)
+    global_max_error_percent = max(global_max_error_percent, diff_percent)
+    diff_percent_str = f"{diff_percent:.5f}".ljust(pad, ' ')
+    print("Expected: " + expected_str + ", got: " + actual_str + " (" + diff_percent_str + "%)")
+
+global_diff_sum_sec = 0
+global_max_error_percent = 0
+
 def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_offset, algorithm = td.Algorithm.ARGMAX):
-    global runCount
+    global runCount, global_diff_sum_sec
     runCount += 1
 
     my_td = td.TemporalDetection(wave2, start, end, file_offset, expected_offset, runCount)
@@ -169,8 +188,11 @@ def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_o
 
     offset_in_seconds = my_td.get_offset(wave1, (sample_rate2, wave3), algorithm)
 
+    print_result(expected_offset, offset_in_seconds)
+    diff_sec = abs(expected_offset - offset_in_seconds)
+    global_diff_sum_sec += diff_sec
+
     if offset_in_seconds != pytest.approx(expected_offset, rel=0.01):
-    #if offset_in_seconds != pytest.approx(expected_offset, rel=0.05):
         start_time = start / sample_rate2
         end_time = end / sample_rate2
         return f"Wavfile2 window ({start_time:,.3f},{end_time:,.3f}). Expected offset is {expected_offset:,.3f}, but actual was {offset_in_seconds:,.3f}"

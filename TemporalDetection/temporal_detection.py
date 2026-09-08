@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import scipy.signal as sps
 import sounddevice as sd
@@ -343,7 +344,7 @@ class TemporalDetection():
     def algorithm_fft(self, sample_freq1: int, data1: np.ndarray, sample_freq2: int, data2: np.ndarray):
         # This algorithm requires both samplerates to be identical.
         # If they aren't, one of the audio clips needs oversampling/downsampling to match
-        assert(sample_freq1 == sample_freq2)
+        assert sample_freq1 == sample_freq2
         samplerate = sample_freq1
         audio_1 = np.asarray(data1, dtype=np.float32)
         audio_2 = np.asarray(data2, dtype=np.float32)
@@ -356,10 +357,7 @@ class TemporalDetection():
         _, t1, S1 = sps.spectrogram(audio_1, samplerate, nperseg=nperseg, noverlap=noverlap, mode='magnitude')
         _, _, S2 = sps.spectrogram(audio_2, samplerate, nperseg=nperseg, noverlap=noverlap, mode='magnitude')
 
-        # Preprocessing: frame-wise normalization, log-magnitude, re-normalize (as you had)
         def preprocess(S):
-            S = S / np.sqrt(np.sum(S**2, axis=0, keepdims=True) + 1e-10)
-            S = np.log1p(S)
             S = S / np.sqrt(np.sum(S**2, axis=0, keepdims=True) + 1e-10)
             return S
 
@@ -385,9 +383,13 @@ class TemporalDetection():
         A_pad[:, :N1] = S1
         B_pad[:, :N2] = B_rev  # note: B_rev already reversed along its time axis
 
-        # Batch rFFT along time axis for each frequency bin
-        FA = np.fft.rfft(A_pad, n=L, axis=1)
-        FB = np.fft.rfft(B_pad, n=L, axis=1)
+        A_pad = np.ascontiguousarray(A_pad)
+        B_pad = np.ascontiguousarray(B_pad)
+
+        # scipy rfft
+        n_workers = max(1, os.cpu_count())
+        FA = fft.rfft(A_pad, n=L, axis=1, workers=n_workers)
+        FB = fft.rfft(B_pad, n=L, axis=1, workers=n_workers)
 
         # Multiply per-frequency, sum across frequencies in frequency-domain, inverse rfft once
         prod_sum = np.sum(FA * FB, axis=0)          # shape (L_rfft,)
@@ -418,13 +420,14 @@ class TemporalDetection():
         center = coarse_offset_samples
         final_offset_samples, correlation = correlation(audio_1, audio_2, center, samplerate)
 
+        offset_samples_int = int(round(final_offset_samples))
+        expected_len = max(1, len(audio_1) - len(audio_2) + 1)
+        repeat_factor = max(1, expected_len // len(spectral_correlation) + 1)
+        spectral_correlation_padded = np.repeat(spectral_correlation, repeat_factor)[:expected_len]
+        spectral_correlation_padded = np.pad(spectral_correlation_padded, (0, len(audio_2)))
+
         do_plot = False
         if do_plot:
-            offset_samples_int = int(round(final_offset_samples))
-            expected_len = max(1, len(audio_1) - len(audio_2) + 1)
-            repeat_factor = max(1, expected_len // len(spectral_correlation) + 1)
-            spectral_correlation_padded = np.repeat(spectral_correlation, repeat_factor)[:expected_len]
-            spectral_correlation_padded = np.pad(spectral_correlation_padded, (0, len(audio_2)))
             #plt.plot(correlation) # Normal time-domain correlation (centered around `center` variable)
             self.plot_it(data1, spectral_correlation_padded, offset_samples_int) # Frequency domain correlation
 

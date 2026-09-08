@@ -153,6 +153,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
 
     print("\x1b[32mDIFF SUM (seconds):", global_diff_sum_sec, "s\x1b[0m")
     print("\x1b[32mMax error percent:", global_max_error_percent, "%\x1b[0m")
+    print("\x1b[32mDuration:", global_time_duration, "s\x1b[0m")
 
     assert err_percentage < 0.1, f"Errors: {err_percentage:,.2%} ({err_count}/{count_total}). Execution time: {execution_time:.4f} seconds"
 
@@ -173,9 +174,10 @@ def print_result(expected, actual):
 
 global_diff_sum_sec = 0
 global_max_error_percent = 0
+global_time_duration = 0
 
 def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_offset, algorithm = td.Algorithm.ARGMAX):
-    global runCount, global_diff_sum_sec
+    global runCount, global_diff_sum_sec, global_time_duration
     runCount += 1
 
     my_td = td.TemporalDetection(wave2, start, end, file_offset, expected_offset, runCount)
@@ -186,7 +188,10 @@ def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_o
     wave3 = _wave3
     #wave3 = hamming(_wave3)
 
+    start = time.time()
     offset_in_seconds = my_td.get_offset(wave1, (sample_rate2, wave3), algorithm)
+    duration = time.time() - start
+    global_time_duration += duration
 
     print_result(expected_offset, offset_in_seconds)
     diff_sec = abs(expected_offset - offset_in_seconds)

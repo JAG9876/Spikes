@@ -24,6 +24,9 @@ spike_audio = os.path.join(base, "single_pulse_10s_48k_mono16.wav")
 sine_and_spike_audio = os.path.join(base, "single_sine_and_pulse_10s_48k_mono16.wav")
 sine_audio = os.path.join(base, "single_sine_10s_48k_mono16.wav")
 
+ma_audio = os.path.join(base, "mA_reversed.wav")
+mb_audio = os.path.join(base, "mB_reversed.wav")
+
 @pytest.mark.parametrize("wavfile1, wavfile2, full_expected_offset, algorithm", [
         # < 1 second
         (mobile_audio, pc_audio, 1.953, td.Algorithm.ARGMAX),
@@ -34,7 +37,10 @@ sine_audio = os.path.join(base, "single_sine_10s_48k_mono16.wav")
         # ? seconds
         (mobile_audio, pc_audio, 1.953, td.Algorithm.AMP_CORRELATION),
         # ? seconds
-        (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT)
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT),
+        (ma_audio, mb_audio, 1.953, td.Algorithm.GCCPHAT),
+        # ? seconds
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.FFT),
     ])
 def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algorithm):
     wave1 = wavfile.read(wavfile1)
@@ -46,6 +52,7 @@ def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algo
 
 @pytest.mark.parametrize("wavfile1, wavfile2, full_expected_offset, algorithm", [
         #('test_files\\audio\\OneClapPianoMobile.wav', 'test_files\\audio\\OneClapStuebordPCMono.wav', 1.953, td.Algorithm.CORRELATION),
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.CORRELATION),
         # 4 seconds, error = 47%
         (mobile_audio, pc_audio, 1.953, td.Algorithm.SCI_PI_CORRELATION),
         # 24 seconds, error = 60%
@@ -55,7 +62,9 @@ def test_get_offset(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algo
         # 28 seconds, error = 60%
         (mobile_audio, pc_audio, 1.953, td.Algorithm.GCCPHAT),
         (mobile_audio, mobile_audio, 0.0, td.Algorithm.GCCPHAT),
-        (sine_audio, sine_audio, 0.0, td.Algorithm.GCCPHAT)
+        (sine_audio, sine_audio, 0.0, td.Algorithm.GCCPHAT),
+        # ? minutes, error = ?
+        (mobile_audio, pc_audio, 1.953, td.Algorithm.FFT),
     ])
 def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset, algorithm: td.Algorithm):
     errors = []
@@ -81,6 +90,18 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
 
     start_time = time.perf_counter()
 
+    '''
+    # Temporary single-test, remove when done
+    v1_start = 130000
+    v1_end = 170000
+    v1_samplerate = wave1[0]
+    v1_temp = wave1[1][v1_start:v1_end]
+    v1 = (v1_samplerate, v1_temp)
+    v2_start = 70000
+    v2_end = 80000
+    err = check_window(v1, wave2, v2_start, v2_end, sample_rate2, 0, 0, algorithm)
+    '''
+
     # Cut from the start of wave2
     #'''
     for i in range(0, 10):
@@ -88,12 +109,12 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = wave2_length
         expected_offset = full_expected_offset + start / sample_rate2
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
         count_total += 1
-        print(f"i={i}")
+        #print(f"i={i}")
         #input("Press Enter to continue")
 
     # Cut from the end of wave2
@@ -102,7 +123,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = int(wave2_length * i / 10)
         expected_offset = full_expected_offset
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
@@ -116,7 +137,7 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
         end = int(start + wave2_length / NUM_SECTION)
         expected_offset = full_expected_offset + start / sample_rate2
 
-        err = check_window(wave1, wave2, start, end, sample_rate2, full_expected_offset * 48000, expected_offset, algorithm)
+        err = check_window(wave1, wave2, start, end, sample_rate2, int(full_expected_offset * 48000), expected_offset, algorithm)
 
         if err != None:
             errors.append(err)
@@ -130,12 +151,33 @@ def test_get_offset_accuracy_and_speed(wavfile1, wavfile2, full_expected_offset,
     err_count = len(errors)
     err_percentage = err_count / count_total
 
+    print("\x1b[32mDIFF SUM (seconds):", global_diff_sum_sec, "s\x1b[0m")
+    print("\x1b[32mMax error percent:", global_max_error_percent, "%\x1b[0m")
+    print("\x1b[32mDuration:", global_time_duration, "s\x1b[0m")
+
     assert err_percentage < 0.1, f"Errors: {err_percentage:,.2%} ({err_count}/{count_total}). Execution time: {execution_time:.4f} seconds"
 
 runCount = 0
 
+def print_result(expected, actual):
+    global global_max_error_percent
+    pad = 6
+    expected_str = f"{expected:.3f}".ljust(pad, ' ')
+    actual_str = f"{actual:.3f}".ljust(pad, ' ')
+
+    # This percentage matches what pytest.approx(..., rel=...) is comparing with
+    diff = abs(expected - actual)
+    diff_percent = 100 * (diff / expected)
+    global_max_error_percent = max(global_max_error_percent, diff_percent)
+    diff_percent_str = f"{diff_percent:.5f}".ljust(pad, ' ')
+    print("Expected: " + expected_str + ", got: " + actual_str + " (" + diff_percent_str + "%)")
+
+global_diff_sum_sec = 0
+global_max_error_percent = 0
+global_time_duration = 0
+
 def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_offset, algorithm = td.Algorithm.ARGMAX):
-    global runCount
+    global runCount, global_diff_sum_sec, global_time_duration
     runCount += 1
 
     my_td = td.TemporalDetection(wave2, start, end, file_offset, expected_offset, runCount)
@@ -146,10 +188,16 @@ def check_window(wave1, wave2, start, end, sample_rate2, file_offset, expected_o
     wave3 = _wave3
     #wave3 = hamming(_wave3)
 
+    start = time.time()
     offset_in_seconds = my_td.get_offset(wave1, (sample_rate2, wave3), algorithm)
+    duration = time.time() - start
+    global_time_duration += duration
 
-    #if offset_in_seconds != pytest.approx(expected_offset, rel=0.01):
-    if offset_in_seconds != pytest.approx(expected_offset, rel=0.05):
+    print_result(expected_offset, offset_in_seconds)
+    diff_sec = abs(expected_offset - offset_in_seconds)
+    global_diff_sum_sec += diff_sec
+
+    if offset_in_seconds != pytest.approx(expected_offset, rel=0.01):
         start_time = start / sample_rate2
         end_time = end / sample_rate2
         return f"Wavfile2 window ({start_time:,.3f},{end_time:,.3f}). Expected offset is {expected_offset:,.3f}, but actual was {offset_in_seconds:,.3f}"

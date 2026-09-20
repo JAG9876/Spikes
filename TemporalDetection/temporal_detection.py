@@ -351,7 +351,7 @@ class TemporalDetection():
 
         # Parameters for STFT
         nperseg = 512
-        noverlap = nperseg * 0.75
+        noverlap = 0 # nperseg * 0.75
 
         # Compute spectrogram magnitudes (centers of windows -> t arrays are frame-center times)
         _, t1, S1 = sps.spectrogram(audio_1, samplerate, nperseg=nperseg, noverlap=noverlap, mode='magnitude')

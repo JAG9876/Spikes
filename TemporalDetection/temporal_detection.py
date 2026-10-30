@@ -400,25 +400,34 @@ class TemporalDetection():
         end_idx = N1  # python slice exclusive
         spectral_correlation = conv_all[start_idx:end_idx]  # length num_positions
 
-        i_peak = np.argmax(spectral_correlation)
-        coarse_offset_samples = t1[i_peak] * samplerate
+        def correlation(audio_1, audio_2, center, samplerate, window_sec=0.2):
+            n1, n2 = len(audio_1), len(audio_2)
 
-        # Normal time-domain correlation around the coarse estimate
-        def correlation(audio_1, audio_2, center, samplerate):
-            refine_window_sec = 0.1 # How much around the center we want to time-correlate on
-            half_win = refine_window_sec * samplerate
+            half_win = int(round(window_sec / 2 * samplerate))
+            center = int(round(center))
 
-            seg_start = int(max(0, center - half_win))
-            seg_end = int(min(len(audio_1), center + half_win + len(audio_2))) # ensure seg can contain audio_2
+            # --- Search range for the START position of audio_2 ---
+            # Valid start positions are 0 .. n1 - n2.
+            max_start = n1 - n2
+            start_lo = min(max(0, center - half_win), max_start)
+            start_hi = max(min(max_start, center + half_win), start_lo)
 
-            # use FFT-based correlate for speed on moderate sizes
-            corr = sps.correlate(audio_1[seg_start:seg_end], audio_2, mode='valid', method='fft')
-            samples_peak_index = seg_start + np.argmax(corr)
+            # The segment must cover every candidate start plus the full length of audio_2.
+            seg_start = start_lo
+            seg_end = start_hi + n2          # <= n1 guaranteed, since start_hi <= n1 - n2
+            seg = audio_1[seg_start:seg_end] # len(seg) >= n2 guaranteed
+
+            # Use FFT-based correlate for speed on moderate sizes
+            corr = sps.correlate(seg, audio_2, mode='valid', method='fft')   # length = start_hi - start_lo + 1
+
+            peak = np.argmax(corr)
+            samples_peak_index = seg_start + int(peak)
 
             return samples_peak_index, corr
 
-        center = coarse_offset_samples
-        final_offset_samples, correlation = correlation(audio_1, audio_2, center, samplerate)
+        i_peak = np.argmax(spectral_correlation)
+        coarse_center_samples = t1[i_peak] * samplerate
+        final_offset_samples, correlation = correlation(audio_1, audio_2, coarse_center_samples, samplerate)
 
         offset_samples_int = int(round(final_offset_samples))
         expected_len = max(1, len(audio_1) - len(audio_2) + 1)
